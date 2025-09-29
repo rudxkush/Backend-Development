@@ -1,0 +1,33 @@
+def run_concurrent_tasks():
+    # bucket of tasks: each is just func + args + kwargs
+    tasks = [
+        {"func": task_one, "args": (), "kwargs": {}},
+        {"func": task_two, "args": (), "kwargs": {}},
+        {"func": task_three, "args": (), "kwargs": {}}
+    ]
+
+    results = []
+    # spin up a thread pool → at most 3 threads alive at once
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        # fire off all tasks → submit() gives back a future (placeholder for result)
+        # keep a dict so we know which future belongs to which function
+        future_to_task = {
+            executor.submit(task["func"], *task["args"], **task["kwargs"]): task["func"].__name__
+            for task in tasks
+        }
+
+        # futures come back in the order they finish, not the order we launched them
+        for future in as_completed(future_to_task):
+            task_name = future_to_task[future]
+            try:
+                # unwrap the actual return value (blocks until that thread is done)
+                result = future.result()
+                logging.info(f"{task_name} completed with result: {result}")
+                results.append((task_name, result))
+            except Exception as e:
+                # if a thread blew up, don’t kill the whole run → just log + mark None
+                logging.error(f"{task_name} failed with error: {e}")
+                results.append((task_name, None))
+
+    # overall summary: list of (function_name, result or None if it crashed)
+    return results
